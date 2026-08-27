@@ -20,7 +20,7 @@
                 <h2 class="text-md font-bold text-blue-900 mb-2">💡 이용 안내</h2>
                 <p class="text-xs text-blue-700 leading-relaxed">
                     • 처음 방문하셨다면 사용할 <b>이름과 비밀번호</b>를 입력하세요. 동일한 이름이 없으면 <b>자동으로 새 계정이 생성</b>되며 기본 포인트가 지급됩니다!<br>
-                    • 관리자 계정(ID: Admin)으로 로그인하면 경기 매칭, 포인트 관리 및 상품 관리를 할 수 있습니다.
+                    • 관리자 계정(ID: Admin)으로 로그인하면 경기 매칭, 포인트 관리 및 역대 기록을 볼 수 있습니다.
                 </p>
             </div>
 
@@ -45,7 +45,7 @@
                 <a href="/" class="text-xs bg-white text-slate-700 px-3 py-1.5 rounded-lg border font-semibold hover:bg-slate-100">로그아웃</a>
             </div>
 
-            <!-- 시스템 기본 설정 및 컬링 보상 설정 추가 -->
+            <!-- 시스템 설정 설정창 -->
             <div class="bg-slate-100 rounded-xl p-4 mb-6">
                 <h3 class="font-bold text-slate-700 text-sm mb-3">⚙️ 시스템 기본 수치 및 상점 설정</h3>
                 <form action="/admin/update-settings" method="POST" class="grid grid-cols-2 gap-3">
@@ -85,48 +85,39 @@
 
             <!-- 상품 관리 패널 -->
             <div class="bg-emerald-50 border border-emerald-200 rounded-xl p-4 mb-6">
-                <h3 class="font-bold text-emerald-900 text-sm mb-3">🛍️ 부스 상품 관리 (추가 / 수정 / 삭제)</h3>
+                <h3 class="font-bold text-emerald-900 text-sm mb-3">🛍️ 부스 상품 관리</h3>
                 <form action="/admin/add-product" method="POST" class="grid grid-cols-3 gap-2 mb-4 bg-white p-3 rounded-xl border border-emerald-100">
                     <div>
                         <label class="block text-[10px] font-bold text-slate-600 mb-1">상품 이름</label>
-                        <input type="text" name="name" placeholder="예: 음료수" required class="w-full p-2 border rounded-lg text-xs">
+                        <input type="text" name="name" placeholder="상품명" required class="w-full p-2 border rounded-lg text-xs">
                     </div>
                     <div>
-                        <label class="block text-[10px] font-bold text-slate-600 mb-1">가격 (포인트)</label>
+                        <label class="block text-[10px] font-bold text-slate-600 mb-1">가격</label>
                         <input type="number" name="price" placeholder="가격" required class="w-full p-2 border rounded-lg text-xs">
                     </div>
                     <div>
-                        <label class="block text-[10px] font-bold text-slate-600 mb-1">재고 수량</label>
+                        <label class="block text-[10px] font-bold text-slate-600 mb-1">재고</label>
                         <input type="number" name="stock" placeholder="재고" required class="w-full p-2 border rounded-lg text-xs">
                     </div>
                     <div class="col-span-3">
-                        <button type="submit" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2 rounded-lg text-xs transition">새 상품 등록하기</button>
+                        <button type="submit" class="w-full bg-emerald-600 text-white font-bold py-2 rounded-lg text-xs">새 상품 등록</button>
                     </div>
                 </form>
-
-                <div class="space-y-2 max-h-60 overflow-y-auto">
+                <div class="space-y-2 max-h-40 overflow-y-auto">
                     <% products.forEach(p => { %>
-                        <form action="/admin/update-product" method="POST" class="bg-white p-3 rounded-xl border flex items-center justify-between space-x-2">
+                        <form action="/admin/update-product" method="POST" class="bg-white p-2 rounded-lg border flex items-center justify-between space-x-2 text-xs">
                             <input type="hidden" name="productId" value="<%= p.id %>">
-                            <div class="flex-1">
-                                <input type="text" name="name" value="<%= p.name %>" class="w-full p-1 border rounded text-xs font-bold" required>
-                            </div>
-                            <div class="w-20">
-                                <input type="number" name="price" value="<%= p.price %>" class="w-full p-1 border rounded text-xs" required>
-                            </div>
-                            <div class="w-16">
-                                <input type="number" name="stock" value="<%= p.stock %>" class="w-full p-1 border rounded text-xs" required>
-                            </div>
-                            <div class="flex space-x-1">
-                                <button type="submit" class="bg-blue-600 text-white px-2 py-1 rounded text-[11px] font-semibold">변경</button>
-                                <button type="submit" formaction="/admin/delete-product" class="bg-red-500 text-white px-2 py-1 rounded text-[11px] font-semibold" onclick="return confirm('정말 삭제하시겠습니까?');">삭제</button>
-                            </div>
+                            <input type="text" name="name" value="<%= p.name %>" class="flex-1 p-1 border rounded font-bold" required>
+                            <input type="number" name="price" value="<%= p.price %>" class="w-16 p-1 border rounded" required>
+                            <input type="number" name="stock" value="<%= p.stock %>" class="w-14 p-1 border rounded" required>
+                            <button type="submit" class="bg-blue-600 text-white px-2 py-1 rounded">수정</button>
+                            <button type="submit" formaction="/admin/delete-product" class="bg-red-500 text-white px-2 py-1 rounded" onclick="return confirm('삭제하시겠습니까?');">삭제</button>
                         </form>
                     <% }) %>
                 </div>
             </div>
 
-            <!-- 로봇 결투 매칭 및 제어 패널 -->
+            <!-- 로봇 결투 매칭 제어 패널 -->
             <div class="bg-indigo-50 border border-indigo-200 rounded-xl p-4 mb-6">
                 <h3 class="font-bold text-indigo-900 text-sm mb-3">⚔️ 로봇 결투 매칭 및 배팅 통제</h3>
                 
@@ -134,21 +125,21 @@
                     <form action="/admin/start-match" method="POST" class="space-y-3">
                         <div class="grid grid-cols-2 gap-3">
                             <div>
-                                <label class="block text-xs font-bold text-indigo-700 mb-1">플레이어 1 선택</label>
+                                <label class="block text-xs font-bold text-indigo-700 mb-1">플레이어 1</label>
                                 <select name="player1_id" required class="w-full p-2.5 border rounded-lg text-sm bg-white">
                                     <option value="">선택하세요</option>
                                     <% users.forEach(u => { %>
-                                        <option value="<%= u.id %>"><%= u.name %> (보유: <%= u.points %>P)</option>
+                                        <option value="<%= u.id %>"><%= u.name %> (<%= u.points %>P)</option>
                                     <% }) %>
                                 </select>
                                 <input type="number" name="p1_fee" value="1000" placeholder="참가비" class="w-full mt-2 p-2 border rounded-lg text-sm bg-white" required>
                             </div>
                             <div>
-                                <label class="block text-xs font-bold text-indigo-700 mb-1">플레이어 2 선택</label>
+                                <label class="block text-xs font-bold text-indigo-700 mb-1">플레이어 2</label>
                                 <select name="player2_id" required class="w-full p-2.5 border rounded-lg text-sm bg-white">
                                     <option value="">선택하세요</option>
                                     <% users.forEach(u => { %>
-                                        <option value="<%= u.id %>"><%= u.name %> (보유: <%= u.points %>P)</option>
+                                        <option value="<%= u.id %>"><%= u.name %> (<%= u.points %>P)</option>
                                     <% }) %>
                                 </select>
                                 <input type="number" name="p2_fee" value="1000" placeholder="참가비" class="w-full mt-2 p-2 border rounded-lg text-sm bg-white" required>
@@ -158,25 +149,15 @@
                     </form>
                 <% } else if (match.status === 'BETTING') { %>
                     <div class="text-center space-y-3">
-                        <div class="bg-white p-3 rounded-xl border flex justify-around items-center">
-                            <div>
-                                <p class="text-xs text-slate-500">플레이어 1</p>
-                                <p class="font-bold text-slate-800 text-lg"><%= match.p1 ? match.p1.name : '' %></p>
-                            </div>
-                            <span class="text-xl font-bold text-red-500">VS</span>
-                            <div>
-                                <p class="text-xs text-slate-500">플레이어 2</p>
-                                <p class="font-bold text-slate-800 text-lg"><%= match.p2 ? match.p2.name : '' %></p>
-                            </div>
-                        </div>
+                        <p class="text-xs text-indigo-800 font-bold">현재 베팅 진행 중 (P1: <%= match.p1 ? match.p1.name : '' %> vs P2: <%= match.p2 ? match.p2.name : '' %>)</p>
                         <form action="/admin/close-betting" method="POST">
-                            <button type="submit" class="w-full bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold py-3 rounded-xl transition">배팅 마감하기</button>
+                            <button type="submit" class="w-full bg-amber-600 text-white text-xs font-bold py-3 rounded-xl">배팅 마감하기</button>
                         </form>
                     </div>
                 <% } else if (match.status === 'CLOSED_BETTING') { %>
                     <div class="text-center space-y-3">
                         <form action="/admin/end-match" method="POST" class="space-y-2">
-                            <p class="text-xs font-bold text-slate-700">경기 결과 판정 및 최종 정산 (최종 배율 @<%= settings.final_multiplier %> 적용)</p>
+                            <p class="text-xs font-bold text-slate-700">경기 결과 판정 및 최종 정산</p>
                             <div class="grid grid-cols-3 gap-2">
                                 <button type="submit" name="winner" value="1" class="bg-blue-600 text-white text-xs font-bold py-2.5 rounded-lg">P1 승리</button>
                                 <button type="submit" name="winner" value="0" class="bg-slate-600 text-white text-xs font-bold py-2.5 rounded-lg">무승부</button>
@@ -187,7 +168,30 @@
                 <% } %>
             </div>
 
-            <!-- 고객 계정 관리 및 컬링 보상 지급 버튼 추가 -->
+            <!-- 관리자용 역대 경기 기록 뷰어 -->
+            <div class="bg-slate-100 rounded-xl p-4 mb-6">
+                <h3 class="font-bold text-slate-700 text-sm mb-3">📜 관리자용 역대 경기 결과 이력</h3>
+                <div class="max-h-48 overflow-y-auto space-y-2 text-xs">
+                    <% if (matchHistories.length === 0) { %>
+                        <p class="text-slate-400 text-center py-2">아직 완료된 경기 기록이 없습니다.</p>
+                    <% } else { %>
+                        <% matchHistories.forEach(mh => { %>
+                            <div class="bg-white p-2.5 rounded-lg border flex justify-between items-center">
+                                <div>
+                                    <p class="font-bold text-slate-800"><%= mh.player1_name %> vs <%= mh.player2_name %></p>
+                                    <p class="text-[10px] text-slate-400"><%= mh.ended_at %></p>
+                                </div>
+                                <div class="text-right">
+                                    <span class="px-2 py-0.5 bg-blue-100 text-blue-800 font-bold rounded">승자: <%= mh.winner %></span>
+                                    <p class="text-[11px] text-slate-500 mt-1">총 베팅액: <%= mh.total_pool %>P</p>
+                                </div>
+                            </div>
+                        <% }) %>
+                    <% } %>
+                </div>
+            </div>
+
+            <!-- 고객 계정 관리 및 컬링 보상 지급 -->
             <div class="space-y-3">
                 <div class="flex justify-between items-center">
                     <h3 class="font-bold text-slate-700 text-sm">👥 고객 계정 관리 및 정렬</h3>
@@ -197,7 +201,7 @@
                     </div>
                 </div>
 
-                <div class="max-h-80 overflow-y-auto space-y-2 pr-1">
+                <div class="max-h-60 overflow-y-auto space-y-2">
                     <% users.forEach(u => { %>
                         <div class="bg-slate-50 p-3 rounded-xl border space-y-2">
                             <div class="flex items-center justify-between">
@@ -205,19 +209,17 @@
                                     <p class="font-bold text-slate-800 text-sm"><%= u.name %> <span class="text-xs text-slate-400">(비번: <%= u.password %>)</span></p>
                                     <p class="text-xs text-slate-500">포인트: <span class="font-bold text-blue-600"><%= u.points %></span> P</p>
                                 </div>
-                                <!-- 기존 수동 포인트 수정 폼 -->
                                 <form action="/admin/update-points" method="POST" class="flex space-x-1">
                                     <input type="hidden" name="userId" value="<%= u.id %>">
                                     <input type="number" name="points" value="<%= u.points %>" class="w-16 px-2 py-1 border rounded text-xs bg-white">
                                     <button type="submit" class="bg-slate-700 text-white px-2 py-1 rounded text-xs">수정</button>
                                 </form>
                             </div>
-                            <!-- 컬링 게임 보상 간편 지급 버튼 -->
                             <div class="pt-2 border-t flex justify-between items-center">
                                 <span class="text-[11px] text-amber-700 font-semibold">컬링 보상: +<%= settings.curling_reward %>P</span>
                                 <form action="/admin/add-curling-reward" method="POST">
                                     <input type="hidden" name="userId" value="<%= u.id %>">
-                                    <button type="submit" class="bg-amber-500 hover:bg-amber-600 text-white font-bold px-3 py-1 rounded-lg text-xs transition shadow-sm">컬링 보상(+<%= settings.curling_reward %>) 지급</button>
+                                    <button type="submit" class="bg-amber-500 hover:bg-amber-600 text-white font-bold px-3 py-1 rounded-lg text-xs transition shadow-sm">컬링 보상 지급</button>
                                 </form>
                             </div>
                         </div>
@@ -273,8 +275,8 @@
                 </div>
             </div>
 
-            <!-- 베팅 시스템 영역 -->
-            <div class="bg-slate-100 rounded-2xl p-5 border border-slate-200">
+            <!-- 실시간 베팅 시스템 영역 -->
+            <div class="bg-slate-100 rounded-2xl p-5 border border-slate-200 mb-6">
                 <div class="text-center mb-4">
                     <span class="text-xs font-extrabold uppercase px-3 py-1 rounded-full 
                         <%= match.status === 'BETTING' ? 'bg-emerald-100 text-emerald-800 animate-pulse' : (match.status === 'CLOSED_BETTING' ? 'bg-amber-100 text-amber-800' : 'bg-slate-200 text-slate-600') %>">
@@ -297,10 +299,6 @@
                     </div>
 
                     <% if (match.status === 'BETTING') { %>
-                        <div class="bg-blue-50 p-4 rounded-xl mb-4 text-xs text-blue-900 leading-relaxed">
-                            <b>📌 배당 안내:</b> 무승부 시 원금 반환되며, 승리 시 <u>(건 금액) × (총액/이긴쪽총액) × 최종배율(<%= settings.final_multiplier %>)</u>로 정산됩니다!
-                        </div>
-
                         <% if (myBet) { %>
                             <div class="bg-emerald-50 border p-4 rounded-xl text-center">
                                 <p class="text-xs text-emerald-800 font-bold">✅ 베팅 완료되었습니다!</p>
@@ -336,6 +334,35 @@
                         <p class="text-sm">현재 진행 중인 베팅 경기가 없습니다.</p>
                     </div>
                 <% } %>
+            </div>
+
+            <!-- 마이페이지: 내 역대 베팅 결과 기록 -->
+            <div class="bg-blue-50 rounded-2xl p-5 border border-blue-200">
+                <h3 class="font-bold text-blue-900 text-sm mb-3">📊 나의 역대 베팅 참여 및 정산 기록</h3>
+                <div class="max-h-48 overflow-y-auto space-y-2 text-xs">
+                    <% if (myHistories.length === 0) { %>
+                        <p class="text-slate-400 text-center py-2">아직 참여한 베팅 기록이 없습니다.</p>
+                    <% } else { %>
+                        <% myHistories.forEach(mh => { %>
+                            <div class="bg-white p-3 rounded-xl border flex justify-between items-center shadow-sm">
+                                <div>
+                                    <p class="font-bold text-slate-800">선택한 선수: <span class="text-blue-600"><%= mh.chosen_player_name %></span></p>
+                                    <p class="text-[11px] text-slate-500 mt-0.5">베팅 금액: <%= mh.bet_amount %>P</p>
+                                </div>
+                                <div class="text-right">
+                                    <% if (mh.profit > 0) { %>
+                                        <span class="px-2 py-0.5 bg-emerald-100 text-emerald-800 font-bold rounded">획득: +<%= mh.profit %>P</span>
+                                    <% } else if (mh.profit === 0) { %>
+                                        <span class="px-2 py-0.5 bg-slate-100 text-slate-700 font-bold rounded">원금 반환</span>
+                                    <% } else { %>
+                                        <span class="px-2 py-0.5 bg-red-100 text-red-800 font-bold rounded">손실: <%= mh.bet_amount %>P</span>
+                                    <% } %>
+                                    <p class="text-[10px] text-slate-400 mt-1">정산금: <%= mh.payout %>P</p>
+                                </div>
+                            </div>
+                        <% }) %>
+                    <% } %>
+                </div>
             </div>
         <% } %>
     </div>

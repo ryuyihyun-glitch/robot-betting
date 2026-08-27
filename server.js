@@ -45,7 +45,28 @@ db.prepare(`CREATE TABLE IF NOT EXISTS products (
     stock INTEGER
 )`).run();
 
-// 초기 설정값 세팅 (컬링 보상 'curling_reward' 추가)
+// 역대 경기 기록 테이블 및 개인 베팅 기록 테이블 생성
+db.prepare(`CREATE TABLE IF NOT EXISTS match_history (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    player1_name TEXT,
+    player2_name TEXT,
+    winner TEXT, -- '플레이어 1', '플레이어 2', '무승부'
+    total_pool INTEGER,
+    ended_at DATETIME DEFAULT CURRENT_TIMESTAMP
+)`).run();
+
+db.prepare(`CREATE TABLE IF NOT EXISTS user_bet_history (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    match_id INTEGER,
+    user_id INTEGER,
+    user_name TEXT,
+    chosen_player_name TEXT,
+    bet_amount INTEGER,
+    payout INTEGER, -- 정산받은 금액 (잃었으면 0)
+    profit INTEGER  -- 순수익 (payout - bet_amount)
+)`).run();
+
+// 초기 설정값 세팅
 const initSettings = [
     ['initial_points', '1000'],
     ['win_multiplier', '2'],
@@ -53,7 +74,7 @@ const initSettings = [
     ['draw_multiplier', '1'],
     ['final_multiplier', '1'],
     ['store_password', '1234'],
-    ['curling_reward', '200'] // 컬링 게임 보상 기본값 200
+    ['curling_reward', '200']
 ];
 for (let [k, v] of initSettings) {
     const exists = db.prepare("SELECT * FROM settings WHERE key = ?").get(k);
@@ -119,6 +140,13 @@ function getCommonData(currentUser, reqQuery = {}) {
 
     const products = db.prepare("SELECT * FROM products").all();
 
+    // 역대 경기 기록 조회 (관리자용 전체, 일반 유저용 개인)
+    const matchHistories = db.prepare("SELECT * FROM match_history ORDER BY id DESC").all();
+    let myHistories = [];
+    if (currentUser && currentUser.role === 'user') {
+        myHistories = db.prepare("SELECT * FROM user_bet_history WHERE user_id = ? ORDER BY id DESC").all(currentUser.id);
+    }
+
     return {
         user: currentUser,
         users,
@@ -127,7 +155,9 @@ function getCommonData(currentUser, reqQuery = {}) {
         pool: { total: totalPool, p1: p1Pool, p2: p2Pool },
         myBet,
         sort: sortType,
-        products
+        products,
+        matchHistories,
+        myHistories
     };
 }
 
@@ -173,7 +203,6 @@ app.post('/admin/update-settings', (req, res) => {
     res.redirect('/?admin=1');
 });
 
-// 컬링 게임 보상 지급 라우트
 app.post('/admin/add-curling-reward', (req, res) => {
     const { userId } = req.body;
     const reward = parseInt(getSetting('curling_reward') || 200);
@@ -277,6 +306,7 @@ app.post('/admin/close-betting', (req, res) => {
     res.redirect('/?admin=1');
 });
 
+// 경기 결과 확정 및 이력 저장 로직 통합
 app.post('/admin/end-match', (req, res) => {
     const { winner } = req.body; 
     const match = db.prepare("SELECT * FROM match_state WHERE id = 1").get();
@@ -290,6 +320,9 @@ app.post('/admin/end-match', (req, res) => {
     const lMul = parseFloat(getSetting('lose_multiplier'));
     const dMul = parseFloat(getSetting('draw_multiplier'));
     const finalMul = parseFloat(getSetting('final_multiplier') || 1);
+
+    const p1User = db.prepare("SELECT * FROM users WHERE id = ?").get(match.player1_id);
+    const p2User = db.prepare("SELECT * FROM users WHERE id = ?").get(match.player2_id);
 
     let p1NewPts = 0, p2NewPts = 0;
     if (winType === 1) {
@@ -317,6 +350,14 @@ app.post('/admin/end-match', (req, res) => {
         }
     });
 
+    // 역대 경기 기록 저장
+    let winnerStr = winType === 1 ? p1User.name : (winType === 2 ? p2User.name : '무승부');
+    const matchHistInfo = db.prepare("INSERT INTO match_history (player1_name, player2_name, winner, total_pool) VALUES (?, ?, ?, ?)").run(
+        p1User.name, p2User.name, winnerStr, totalPool
+    );
+    const savedMatchId = matchHistInfo.lastInsertRowid;
+
+    // 각 고객 베팅 정산 및 개인 히스토리 저장
     bets.forEach(b => {
         let returnPoints = 0;
         if (winType === 0) {
@@ -334,6 +375,14 @@ app.post('/admin/end-match', (req, res) => {
         if (returnPoints > 0) {
             db.prepare("UPDATE users SET points = points + ? WHERE id = ?").run(returnPoints, b.user_id);
         }
+
+        const betUser = db.prepare("SELECT * FROM users WHERE id = ?").get(b.user_id);
+        const chosenName = b.chosen_player === 1 ? p1User.name : p2User.name;
+        const profit = returnPoints - b.amount;
+
+        db.prepare("INSERT INTO user_bet_history (match_id, user_id, user_name, chosen_player_name, bet_amount, payout, profit) VALUES (?, ?, ?, ?, ?, ?, ?)").run(
+            savedMatchId, b.user_id, betUser.name, chosenName, b.amount, returnPoints, profit
+        );
     });
 
     db.prepare("UPDATE match_state SET status = 'FINISHED', winner = ? WHERE id = 1").run(winType);
