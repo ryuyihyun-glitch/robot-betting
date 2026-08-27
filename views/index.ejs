@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>로봇 격투 베팅 시스템</title>
+    <!-- Tailwind CSS CDN 적용 (모바일 최적화 UI) -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="/socket.io/socket.io.js"></script>
+</head>
+<body class="bg-gray-100 min-h-screen flex flex-col items-center justify-center p-4">
+
+    <div class="w-full max-w-md bg-white rounded-xl shadow-lg p-6">
+        <h1 class="text-2xl font-bold text-center text-gray-800 mb-6">🤖 로봇 격투 베팅 시스템</h1>
+
+        <!-- 로그인 전 화면 -->
+        <% if (!user) { %>
+            <form action="/login" method="POST" class="space-y-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">이름 (또는 ID)</label>
+                    <input type="text" name="name" required class="mt-1 w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">비밀번호</label>
+                    <input type="password" name="password" required class="mt-1 w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                </div>
+                <button type="submit" class="w-full bg-blue-600 text-white py-2 rounded-lg font-semibold hover:bg-blue-700 transition">로그인 / 회원가입</button>
+            </form>
+
+        <!-- 관리자 페이지 화면 -->
+        <% } else if (user.role === 'admin') { %>
+            <div class="text-center mb-4">
+                <span class="bg-red-100 text-red-800 text-xs font-semibold px-2.5 py-0.5 rounded">관리자 모드</span>
+                <h2 class="text-xl font-bold mt-2">학생 포인트 관리</h2>
+            </div>
+            <div class="space-y-3 max-h-96 overflow-y-auto">
+                <% users.forEach(u => { %>
+                    <div class="flex items-center justify-between bg-gray-50 p-3 rounded-lg border" id="user-row-<%= u.id %>">
+                        <div>
+                            <p class="font-semibold text-gray-800"><%= u.name %></p>
+                            <p class="text-sm text-gray-500">보유 포인트: <span id="points-<%= u.id %>" class="font-bold text-blue-600"><%= u.points %></span> P</p>
+                        </div>
+                        <form action="/admin/update-points" method="POST" class="flex space-x-1">
+                            <input type="hidden" name="userId" value="<%= u.id %>">
+                            <input type="number" name="points" value="<%= u.points %>" class="w-20 px-2 py-1 border rounded text-sm">
+                            <button type="submit" class="bg-green-600 text-white px-3 py-1 rounded text-sm hover:bg-green-700">수정</button>
+                        </form>
+                    </div>
+                <% }) %>
+            </div>
+            <a href="/" class="block text-center mt-6 text-sm text-gray-600 hover:underline">로그아웃</a>
+
+        <!-- 일반 사용자(고객) 페이지 화면 -->
+        <% } else { %>
+            <div class="text-center space-y-4">
+                <div class="bg-blue-50 p-4 rounded-lg">
+                    <p class="text-gray-600">환영합니다, <span class="font-bold text-gray-800"><%= user.name %></span>님!</p>
+                    <p class="text-3xl font-extrabold text-blue-600 mt-2"><span id="my-points"><%= user.points %></span> P</p>
+                </div>
+                <p class="text-sm text-gray-500">관리자가 포인트를 변경하면 새로고침 없이 실시간으로 반영됩니다.</p>
+                <a href="/" class="block w-full bg-gray-200 text-gray-700 py-2 rounded-lg font-semibold hover:bg-gray-300 transition text-center">로그아웃</a>
+            </div>
+
+            <script>
+                const socket = io();
+                // 관리자가 포인트를 수정했을 때 실시간 수신
+                socket.on('pointsUpdated', (data) => {
+                    const myId = "<%= user.id %>";
+                    if (String(data.userId) === String(myId)) {
+                        document.getElementById('my-points').innerText = data.points;
+                    }
+                });
+            </script>
+        <% } %>
+    </div>
+
+</body>
+</html>
