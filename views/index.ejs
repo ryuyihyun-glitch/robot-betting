@@ -12,7 +12,7 @@
     <div class="w-full max-w-2xl bg-white rounded-2xl shadow-xl p-6 mb-6">
         <header class="text-center mb-6">
             <h1 class="text-3xl font-extrabold text-slate-800">🤖 로봇 격투 포인트 베팅 & 상점</h1>
-            <p class="text-sm text-slate-500 mt-1">축제 부스 실시간 승부 예측 및 상품 교환 시스템</p>
+            <p class="text-sm text-slate-500 mt-1">축제 부스 실시간 승부 예측 및 자동 배팅봇 시스템</p>
         </header>
 
         <% if (!user) { %>
@@ -20,7 +20,7 @@
                 <h2 class="text-md font-bold text-blue-900 mb-2">💡 이용 안내</h2>
                 <p class="text-xs text-blue-700 leading-relaxed">
                     • 처음 방문하셨다면 사용할 <b>이름과 비밀번호</b>를 입력하세요. 동일한 이름이 없으면 <b>자동으로 새 계정이 생성</b>되며 기본 포인트가 지급됩니다!<br>
-                    • 관리자 계정(ID: Admin)으로 로그인하면 경기 매칭, 포인트 관리 및 역대 기록을 볼 수 있습니다.
+                    • 관리자 계정(ID: Admin)으로 로그인하면 경기 매칭, 포인트 관리 및 AI 배팅봇 제어가 가능합니다.
                 </p>
             </div>
 
@@ -45,7 +45,6 @@
                 <a href="/" class="text-xs bg-white text-slate-700 px-3 py-1.5 rounded-lg border font-semibold hover:bg-slate-100">로그아웃</a>
             </div>
 
-            <!-- 시스템 설정 설정창 -->
             <div class="bg-slate-100 rounded-xl p-4 mb-6">
                 <h3 class="font-bold text-slate-700 text-sm mb-3">⚙️ 시스템 기본 수치 및 상점 설정</h3>
                 <form action="/admin/update-settings" method="POST" class="grid grid-cols-2 gap-3">
@@ -83,7 +82,56 @@
                 </form>
             </div>
 
-            <!-- 상품 관리 패널 -->
+            <div class="bg-cyan-50 border border-cyan-200 rounded-xl p-4 mb-6">
+                <h3 class="font-bold text-cyan-900 text-sm mb-3">🤖 AI 배팅봇 관리 및 추가</h3>
+                <form action="/admin/add-bot" method="POST" class="grid grid-cols-3 gap-2 mb-4 bg-white p-3 rounded-xl border border-cyan-100">
+                    <div>
+                        <label class="block text-[10px] font-bold text-slate-600 mb-1">봇 이름 (ID)</label>
+                        <input type="text" name="name" placeholder="예: 봇_알파" required class="w-full p-2 border rounded-lg text-xs">
+                    </div>
+                    <div>
+                        <label class="block text-[10px] font-bold text-slate-600 mb-1">초기 자산(포인트)</label>
+                        <input type="number" name="points" placeholder="예: 5000" required class="w-full p-2 border rounded-lg text-xs">
+                    </div>
+                    <div>
+                        <label class="block text-[10px] font-bold text-slate-600 mb-1">배팅 성향</label>
+                        <select name="tendency" class="w-full p-2 border rounded-lg text-xs bg-white" required>
+                            <option value="player1">플레이어 1 전용</option>
+                            <option value="player2">플레이어 2 전용</option>
+                            <option value="random">확률 (50% 랜덤)</option>
+                            <option value="underdog">역배 (적은 쪽)</option>
+                            <option value="favorite">정배 (많은 쪽)</option>
+                        </select>
+                    </div>
+                    <div class="col-span-3">
+                        <button type="submit" class="w-full bg-cyan-600 text-white font-bold py-2 rounded-lg text-xs">새 배팅봇 추가</button>
+                    </div>
+                </form>
+
+                <div class="space-y-2 max-h-48 overflow-y-auto">
+                    <% if (bots.length === 0) { %>
+                        <p class="text-xs text-slate-400 text-center py-2">등록된 배팅봇이 없습니다.</p>
+                    <% } else { %>
+                        <% bots.forEach(bot => { %>
+                            <form action="/admin/update-bot" method="POST" class="bg-white p-2.5 rounded-lg border flex items-center justify-between space-x-2 text-xs">
+                                <input type="hidden" name="botId" value="<%= bot.id %>">
+                                <span class="font-bold text-slate-800 w-24 truncate"><%= bot.name %></span>
+                                <input type="number" name="points" value="<%= bot.points %>" class="w-20 p-1 border rounded" required title="포인트">
+                                <select name="tendency" class="p-1 border rounded bg-white">
+                                    <option value="player1" <%= bot.tendency === 'player1' ? 'selected' : '' %>>P1 전용</option>
+                                    <option value="player2" <%= bot.tendency === 'player2' ? 'selected' : '' %>>P2 전용</option>
+                                    <option value="random" <%= bot.tendency === 'random' ? 'selected' : '' %>>확률</option>
+                                    <option value="underdog" <%= bot.tendency === 'underdog' ? 'selected' : '' %>>역배</option>
+                                    <option value="favorite" <%= bot.tendency === 'favorite' ? 'selected' : '' %>>정배</option>
+                                </select>
+                                <button type="submit" class="bg-blue-600 text-white px-2 py-1 rounded">수정</button>
+                                <button type="submit" formaction="/admin/delete-bot" class="bg-red-500 text-white px-2 py-1 rounded" onclick="return confirm('이 배팅봇을 삭제하시겠습니까?');">삭제</button>
+                            </form>
+                        <% }) %>
+                    <% } %>
+                </div>
+            </div>
+
             <div class="bg-emerald-50 border border-emerald-200 rounded-xl p-4 mb-6">
                 <h3 class="font-bold text-emerald-900 text-sm mb-3">🛍️ 부스 상품 관리</h3>
                 <form action="/admin/add-product" method="POST" class="grid grid-cols-3 gap-2 mb-4 bg-white p-3 rounded-xl border border-emerald-100">
@@ -117,7 +165,6 @@
                 </div>
             </div>
 
-            <!-- 로봇 결투 매칭 제어 패널 -->
             <div class="bg-indigo-50 border border-indigo-200 rounded-xl p-4 mb-6">
                 <h3 class="font-bold text-indigo-900 text-sm mb-3">⚔️ 로봇 결투 매칭 및 배팅 통제</h3>
                 
@@ -145,13 +192,13 @@
                                 <input type="number" name="p2_fee" value="1000" placeholder="참가비" class="w-full mt-2 p-2 border rounded-lg text-sm bg-white" required>
                             </div>
                         </div>
-                        <button type="submit" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 rounded-xl text-sm transition shadow-md">경기 시작 및 배팅 오픈</button>
+                        <button type="submit" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 rounded-xl text-sm transition shadow-md">경기 시작 및 배팅 오픈 (AI봇 자동 참여)</button>
                     </form>
                 <% } else if (match.status === 'BETTING') { %>
                     <div class="text-center space-y-3">
                         <p class="text-xs text-indigo-800 font-bold">현재 베팅 진행 중 (P1: <%= match.p1 ? match.p1.name : '' %> vs P2: <%= match.p2 ? match.p2.name : '' %>)</p>
                         <form action="/admin/close-betting" method="POST">
-                            <button type="submit" class="w-full bg-amber-600 text-white text-xs font-bold py-3 rounded-xl">배팅 마감하기</button>
+                            <button type="submit" class="w-full bg-amber-600 text-white text-xs font-bold py-3 rounded-xl">배팅 마감하기 (역배/정배 봇 참여)</button>
                         </form>
                     </div>
                 <% } else if (match.status === 'CLOSED_BETTING') { %>
@@ -168,7 +215,6 @@
                 <% } %>
             </div>
 
-            <!-- 관리자용 역대 경기 기록 뷰어 -->
             <div class="bg-slate-100 rounded-xl p-4 mb-6">
                 <h3 class="font-bold text-slate-700 text-sm mb-3">📜 관리자용 역대 경기 결과 이력</h3>
                 <div class="max-h-48 overflow-y-auto space-y-2 text-xs">
@@ -191,7 +237,6 @@
                 </div>
             </div>
 
-            <!-- 고객 계정 관리 및 컬링 보상 지급 -->
             <div class="space-y-3">
                 <div class="flex justify-between items-center">
                     <h3 class="font-bold text-slate-700 text-sm">👥 고객 계정 관리 및 정렬</h3>
@@ -227,7 +272,6 @@
                 </div>
             </div>
 
-        <!-- 고객(학생) 페이지 화면 -->
         <% } else { %>
             <div class="bg-white border rounded-2xl p-5 mb-6 shadow-sm">
                 <div class="flex justify-between items-center mb-4">
@@ -246,7 +290,6 @@
                 </div>
             </div>
 
-            <!-- 상점 창 -->
             <div class="bg-emerald-50 rounded-2xl p-5 border border-emerald-200 mb-6">
                 <h3 class="font-bold text-emerald-900 text-sm mb-3">🛍️ 부스 상품 상점</h3>
                 <div class="grid grid-cols-1 gap-3">
@@ -275,7 +318,6 @@
                 </div>
             </div>
 
-            <!-- 실시간 베팅 시스템 영역 -->
             <div class="bg-slate-100 rounded-2xl p-5 border border-slate-200 mb-6">
                 <div class="text-center mb-4">
                     <span class="text-xs font-extrabold uppercase px-3 py-1 rounded-full 
@@ -286,15 +328,50 @@
 
                 <% if (match.status === 'BETTING' || match.status === 'CLOSED_BETTING') { %>
                     <div class="grid grid-cols-2 gap-4 mb-4">
-                        <div class="bg-white p-4 rounded-xl border shadow-sm text-center">
-                            <span class="text-[10px] font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded">PLAYER 1</span>
-                            <h3 class="text-lg font-bold text-slate-800 mt-2"><%= match.p1 ? match.p1.name : '' %></h3>
-                            <p class="text-xs text-emerald-600 font-bold mt-2">총 배팅액: <%= pool.p1 %>P</p>
+                        <div class="bg-white p-4 rounded-xl border shadow-sm flex flex-col justify-between">
+                            <div>
+                                <span class="text-[10px] font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded">PLAYER 1</span>
+                                <h3 class="text-lg font-bold text-slate-800 mt-2"><%= match.p1 ? match.p1.name : '' %></h3>
+                                <p class="text-xs text-emerald-600 font-bold mt-1">총 배팅액: <%= pool.p1 %>P</p>
+                            </div>
+                            <div class="mt-3 pt-3 border-t text-[11px] text-slate-600 max-h-28 overflow-y-auto space-y-1">
+                                <p class="font-bold text-slate-400 mb-1">배팅 참여 내역:</p>
+                                <% if (pool.p1Bets.length === 0) { %>
+                                    <p class="text-slate-400 italic">아직 내역이 없습니다.</p>
+                                <% } else { %>
+                                    <% pool.p1Bets.forEach(b => { %>
+                                        <div class="flex justify-between bg-slate-50 px-2 py-1 rounded border">
+                                            <span class="truncate font-medium <%= b.is_bot ? 'text-cyan-700 font-bold' : '' %>">
+                                                <%= b.name %> <%= b.is_bot ? '(🤖봇)' : '' %>
+                                            </span>
+                                            <span class="font-bold text-blue-600"><%= b.amount %>P</span>
+                                        </div>
+                                    <% }) %>
+                                <% } %>
+                            </div>
                         </div>
-                        <div class="bg-white p-4 rounded-xl border shadow-sm text-center">
-                            <span class="text-[10px] font-bold text-purple-600 bg-purple-50 px-2 py-0.5 rounded">PLAYER 2</span>
-                            <h3 class="text-lg font-bold text-slate-800 mt-2"><%= match.p2 ? match.p2.name : '' %></h3>
-                            <p class="text-xs text-emerald-600 font-bold mt-2">총 배팅액: <%= pool.p2 %>P</p>
+
+                        <div class="bg-white p-4 rounded-xl border shadow-sm flex flex-col justify-between">
+                            <div>
+                                <span class="text-[10px] font-bold text-purple-600 bg-purple-50 px-2 py-0.5 rounded">PLAYER 2</span>
+                                <h3 class="text-lg font-bold text-slate-800 mt-2"><%= match.p2 ? match.p2.name : '' %></h3>
+                                <p class="text-xs text-emerald-600 font-bold mt-1">총 배팅액: <%= pool.p2 %>P</p>
+                            </div>
+                            <div class="mt-3 pt-3 border-t text-[11px] text-slate-600 max-h-28 overflow-y-auto space-y-1">
+                                <p class="font-bold text-slate-400 mb-1">배팅 참여 내역:</p>
+                                <% if (pool.p2Bets.length === 0) { %>
+                                    <p class="text-slate-400 italic">아직 내역이 없습니다.</p>
+                                <% } else { %>
+                                    <% pool.p2Bets.forEach(b => { %>
+                                        <div class="flex justify-between bg-slate-50 px-2 py-1 rounded border">
+                                            <span class="truncate font-medium <%= b.is_bot ? 'text-cyan-700 font-bold' : '' %>">
+                                                <%= b.name %> <%= b.is_bot ? '(🤖봇)' : '' %>
+                                            </span>
+                                            <span class="font-bold text-purple-600"><%= b.amount %>P</span>
+                                        </div>
+                                    <% }) %>
+                                <% } %>
+                            </div>
                         </div>
                     </div>
 
@@ -336,7 +413,6 @@
                 <% } %>
             </div>
 
-            <!-- 마이페이지: 내 역대 베팅 결과 기록 -->
             <div class="bg-blue-50 rounded-2xl p-5 border border-blue-200">
                 <h3 class="font-bold text-blue-900 text-sm mb-3">📊 나의 역대 베팅 참여 및 정산 기록</h3>
                 <div class="max-h-48 overflow-y-auto space-y-2 text-xs">
@@ -367,7 +443,6 @@
         <% } %>
     </div>
 
-    <!-- 상품 구매 승인 비밀번호 입력 모달 팝업 -->
     <div id="buyModal" class="fixed inset-0 bg-black/50 hidden flex items-center justify-center p-4 z-50">
         <div class="bg-white rounded-2xl max-w-sm w-full p-6 shadow-2xl space-y-4">
             <h3 class="text-lg font-extrabold text-slate-800 text-center">상품 구매 관리자 승인</h3>

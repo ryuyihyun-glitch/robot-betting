@@ -21,6 +21,14 @@ db.prepare(`CREATE TABLE IF NOT EXISTS users (
     role TEXT DEFAULT 'user'
 )`).run();
 
+// 배팅봇 테이블 생성
+db.prepare(`CREATE TABLE IF NOT EXISTS betting_bots (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT UNIQUE,
+    points INTEGER,
+    tendency TEXT -- 'player1', 'player2', 'random', 'underdog', 'favorite'
+)`).run();
+
 db.prepare(`CREATE TABLE IF NOT EXISTS match_state (
     id INTEGER PRIMARY KEY CHECK (id = 1),
     status TEXT DEFAULT 'CLOSED',
@@ -33,8 +41,11 @@ db.prepare(`CREATE TABLE IF NOT EXISTS match_state (
 
 db.prepare(`CREATE TABLE IF NOT EXISTS bets (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    user_id INTEGER,
-    chosen_player INTEGER,
+    user_id INTEGER,       -- 일반 유저 ID (봇인 경우 NULL 혹은 별도 관리)
+    bot_id INTEGER,        -- 봇 ID (일반 유저인 경우 NULL)
+    is_bot INTEGER DEFAULT 0, -- 0: 유저, 1: 봇
+    name TEXT,             -- 참여자(유저 또는 봇) 이름
+    chosen_player INTEGER, -- 1 또는 2
     amount INTEGER
 )`).run();
 
@@ -45,12 +56,11 @@ db.prepare(`CREATE TABLE IF NOT EXISTS products (
     stock INTEGER
 )`).run();
 
-// 역대 경기 기록 테이블 및 개인 베팅 기록 테이블 생성
 db.prepare(`CREATE TABLE IF NOT EXISTS match_history (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     player1_name TEXT,
     player2_name TEXT,
-    winner TEXT, -- '플레이어 1', '플레이어 2', '무승부'
+    winner TEXT,
     total_pool INTEGER,
     ended_at DATETIME DEFAULT CURRENT_TIMESTAMP
 )`).run();
@@ -62,8 +72,8 @@ db.prepare(`CREATE TABLE IF NOT EXISTS user_bet_history (
     user_name TEXT,
     chosen_player_name TEXT,
     bet_amount INTEGER,
-    payout INTEGER, -- 정산받은 금액 (잃었으면 0)
-    profit INTEGER  -- 순수익 (payout - bet_amount)
+    payout INTEGER,
+    profit INTEGER
 )`).run();
 
 // 초기 설정값 세팅
@@ -95,17 +105,90 @@ function getSetting(key) {
     return row ? row.value : null;
 }
 
+// 봇의 배팅 금액 계산 로직 (최소 200, 1000 초과시 20% 버림)
+function calculateBotBetAmount(botPoints) {
+    if (botPoints < 200) return 0;
+    if (botPoints > 1000) {
+        return Math.floor(botPoints * 0.2);
+    }
+    return 200; // 200 ~ 1000 사이일 경우 기본 최소 금액 혹은 적정선 (200P 적용)
+}
+
+// 즉시 배팅 성향 봇 자동 실행 함수 (배팅 오픈 시점)
+function executeInstantBots() {
+    const match = db.prepare("SELECT * FROM match_state WHERE id = 1").get();
+    if (match.status !== 'BETTING') return;
+
+    const bots = db.prepare("SELECT * FROM bots").all();
+    bots.forEach(bot => {
+        let chosen = null;
+        if (bot.tendency === 'player1') chosen = 1;
+        else if (bot.tendency === 'player2') chosen = 2;
+        else if (bot.tendency === 'random') chosen = Math.random() < 0.5 ? 1 : 2;
+
+        if (chosen !== null) {
+            const betAmt = calculateBotBetAmount(bot.points);
+            if (betAmt > 0 && bot.points >= betAmt) {
+                // 봇 자산 차감 및 배팅 등록
+                db.prepare("UPDATE bots SET points = points - ? WHERE id = ?").run(betAmt, bot.id);
+                db.prepare("INSERT INTO bets (bot_id, is_bot, name, chosen_player, amount) VALUES (?, 1, ?, ?, ?)").run(
+                    bot.id, bot.name, chosen, betAmt
+                );
+            }
+        }
+    });
+}
+
+// 마감 시점 배팅 성향 봇 자동 실행 함수 (배팅 마감 시점)
+function executeDeadlineBots() {
+    const match = db.prepare("SELECT * FROM match_state WHERE id = 1").get();
+    if (match.status !== 'BETTING') return;
+
+    const bots = db.prepare("SELECT * FROM bots WHERE tendency IN ('underdog', 'favorite')").all();
+    if (bots.length === 0) return;
+
+    // 현재 양측 풀 계산
+    let p1Total = 0, p2Total = 0;
+    const currentBets = db.prepare("SELECT * FROM bets").all();
+    currentBets.forEach(b => {
+        if (b.chosen_player === 1) p1Total += b.amount;
+        if (b.chosen_player === 2) p2Total += b.amount;
+    });
+
+    bots.forEach(bot => {
+        let chosen = 1;
+        if (bot.tendency === 'underdog') {
+            // 역배: 배팅액이 적은 쪽 선택 (같으면 랜덤)
+            if (p1Total < p2Total) chosen = 1;
+            else if (p2Total < p1Total) chosen = 2;
+            else chosen = Math.random() < 0.5 ? 1 : 2;
+        } else if (bot.tendency === 'favorite') {
+            // 정배: 배팅액이 많은 쪽 선택 (같으면 랜덤)
+            if (p1Total > p2Total) chosen = 1;
+            else if (p2Total > p1Total) chosen = 2;
+            else chosen = Math.random() < 0.5 ? 1 : 2;
+        }
+
+        const betAmt = calculateBotBetAmount(bot.points);
+        if (betAmt > 0 && bot.points >= betAmt) {
+            db.prepare("UPDATE bots SET points = points - ? WHERE id = ?").run(betAmt, bot.id);
+            db.prepare("INSERT INTO bets (bot_id, is_bot, name, chosen_player, amount) VALUES (?, 1, ?, ?, ?)").run(
+                bot.id, bot.name, chosen, betAmt
+            );
+        }
+    });
+}
+
 function getCommonData(currentUser, reqQuery = {}) {
     const usersRaw = db.prepare("SELECT * FROM users WHERE role = 'user'").all();
     const sortType = reqQuery.sort || 'name';
     
     const users = [...usersRaw].sort((a, b) => {
-        if (sortType === 'points') {
-            return b.points - a.points;
-        } else {
-            return a.name.localeCompare(b.name, 'ko');
-        }
+        if (sortType === 'points') return b.points - a.points;
+        return a.name.localeCompare(b.name, 'ko');
     });
+
+    const bots = db.prepare("SELECT * FROM bots").all();
 
     const settings = {
         initial_points: getSetting('initial_points'),
@@ -124,12 +207,21 @@ function getCommonData(currentUser, reqQuery = {}) {
     let totalPool = 0;
     let p1Pool = 0;
     let p2Pool = 0;
+    let p1Bets = []; // [{name, amount}, ...]
+    let p2Bets = [];
+
     if (match.status === 'BETTING' || match.status === 'CLOSED_BETTING') {
         const bets = db.prepare("SELECT * FROM bets").all();
         bets.forEach(b => {
             totalPool += b.amount;
-            if (b.chosen_player === 1) p1Pool += b.amount;
-            if (b.chosen_player === 2) p2Pool += b.amount;
+            if (b.chosen_player === 1) {
+                p1Pool += b.amount;
+                p1Bets.push({ name: b.name, amount: b.amount, is_bot: b.is_bot });
+            }
+            if (b.chosen_player === 2) {
+                p2Pool += b.amount;
+                p2Bets.push({ name: b.name, amount: b.amount, is_bot: b.is_bot });
+            }
         });
     }
 
@@ -139,8 +231,6 @@ function getCommonData(currentUser, reqQuery = {}) {
     }
 
     const products = db.prepare("SELECT * FROM products").all();
-
-    // 역대 경기 기록 조회 (관리자용 전체, 일반 유저용 개인)
     const matchHistories = db.prepare("SELECT * FROM match_history ORDER BY id DESC").all();
     let myHistories = [];
     if (currentUser && currentUser.role === 'user') {
@@ -150,9 +240,10 @@ function getCommonData(currentUser, reqQuery = {}) {
     return {
         user: currentUser,
         users,
+        bots,
         settings,
         match: { ...match, p1, p2 },
-        pool: { total: totalPool, p1: p1Pool, p2: p2Pool },
+        pool: { total: totalPool, p1: p1Pool, p2: p2Pool, p1Bets, p2Bets },
         myBet,
         sort: sortType,
         products,
@@ -187,6 +278,36 @@ app.post('/login', (req, res) => {
         io.emit('refreshData');
         return res.render('index', getCommonData(newUser, req.query));
     }
+});
+
+// 배팅봇 관리 라우터
+app.post('/admin/add-bot', (req, res) => {
+    const { name, points, tendency } = req.body;
+    try {
+        db.prepare("INSERT INTO betting_bots (name, points, tendency) VALUES (?, ?, ?)").run(
+            name, parseInt(points), tendency
+        );
+        io.emit('refreshData');
+        res.redirect('/?admin=1');
+    } catch (e) {
+        res.send("<script>alert('동일한 이름의 배팅봇이 이미 존재합니다.'); history.back();</script>");
+    }
+});
+
+app.post('/admin/update-bot', (req, res) => {
+    const { botId, points, tendency } = req.body;
+    db.prepare("UPDATE betting_bots SET points = ?, tendency = ? WHERE id = ?").run(
+        parseInt(points), tendency, botId
+    );
+    io.emit('refreshData');
+    res.redirect('/?admin=1');
+});
+
+app.post('/admin/delete-bot', (req, res) => {
+    const { botId } = req.body;
+    db.prepare("DELETE FROM betting_bots WHERE id = ?").run(botId);
+    io.emit('refreshData');
+    res.redirect('/?admin=1');
 });
 
 app.post('/admin/update-settings', (req, res) => {
@@ -277,10 +398,10 @@ app.post('/admin/start-match', (req, res) => {
     const fee2 = parseInt(p2_fee);
 
     if (p1.points < fee1) {
-        return res.send(`<script>alert('플레이어 1(${p1.name})의 포인트가 부족하여 참가할 수 없습니다. (보유: ${p1.points}P, 필요: ${fee1}P)'); history.back();</script>`);
+        return res.send(`<script>alert('플레이어 1(${p1.name})의 포인트가 부족합니다.'); history.back();</script>`);
     }
     if (p2.points < fee2) {
-        return res.send(`<script>alert('플레이어 2(${p2.name})의 포인트가 부족하여 참가할 수 없습니다. (보유: ${p2.points}P, 필요: ${fee2}P)'); history.back();</script>`);
+        return res.send(`<script>alert('플레이어 2(${p2.name})의 포인트가 부족합니다.'); history.back();</script>`);
     }
 
     db.prepare("DELETE FROM bets").run();
@@ -290,6 +411,9 @@ app.post('/admin/start-match', (req, res) => {
 
     db.prepare("UPDATE users SET points = points - ? WHERE id = ?").run(fee1, player1_id);
     db.prepare("UPDATE users SET points = points - ? WHERE id = ?").run(fee2, player2_id);
+
+    // 즉시 배팅 성향 봇 자동 실행
+    executeInstantBots();
 
     io.emit('matchStarted');
     res.redirect('/?admin=1');
@@ -301,12 +425,14 @@ app.post('/admin/close-betting', (req, res) => {
         return res.send("<script>alert('현재 베팅 진행 중인 상태가 아닙니다.'); history.back();</script>");
     }
 
+    // 마감 시점 배팅 성향 봇 자동 실행 (역배, 정배)
+    executeDeadlineBots();
+
     db.prepare("UPDATE match_state SET status = 'CLOSED_BETTING' WHERE id = 1").run();
     io.emit('refreshData');
     res.redirect('/?admin=1');
 });
 
-// 경기 결과 확정 및 이력 저장 로직 통합
 app.post('/admin/end-match', (req, res) => {
     const { winner } = req.body; 
     const match = db.prepare("SELECT * FROM match_state WHERE id = 1").get();
@@ -350,14 +476,13 @@ app.post('/admin/end-match', (req, res) => {
         }
     });
 
-    // 역대 경기 기록 저장
     let winnerStr = winType === 1 ? p1User.name : (winType === 2 ? p2User.name : '무승부');
     const matchHistInfo = db.prepare("INSERT INTO match_history (player1_name, player2_name, winner, total_pool) VALUES (?, ?, ?, ?)").run(
         p1User.name, p2User.name, winnerStr, totalPool
     );
     const savedMatchId = matchHistInfo.lastInsertRowid;
 
-    // 각 고객 베팅 정산 및 개인 히스토리 저장
+    // 정산 및 히스토리 저장 (유저와 봇 구분)
     bets.forEach(b => {
         let returnPoints = 0;
         if (winType === 0) {
@@ -372,17 +497,24 @@ app.post('/admin/end-match', (req, res) => {
             returnPoints = 0;
         }
 
-        if (returnPoints > 0) {
-            db.prepare("UPDATE users SET points = points + ? WHERE id = ?").run(returnPoints, b.user_id);
+        if (b.is_bot === 1) {
+            // 봇에게 포인트 반환
+            if (returnPoints > 0) {
+                db.prepare("UPDATE betting_bots SET points = points + ? WHERE id = ?").run(returnPoints, b.bot_id);
+            }
+        } else {
+            // 일반 유저 정산 및 기록
+            if (returnPoints > 0) {
+                db.prepare("UPDATE users SET points = points + ? WHERE id = ?").run(returnPoints, b.user_id);
+            }
+            const betUser = db.prepare("SELECT * FROM users WHERE id = ?").get(b.user_id);
+            const chosenName = b.chosen_player === 1 ? p1User.name : p2User.name;
+            const profit = returnPoints - b.amount;
+
+            db.prepare("INSERT INTO user_bet_history (match_id, user_id, user_name, chosen_player_name, bet_amount, payout, profit) VALUES (?, ?, ?, ?, ?, ?, ?)").run(
+                savedMatchId, b.user_id, betUser.name, chosenName, b.amount, returnPoints, profit
+            );
         }
-
-        const betUser = db.prepare("SELECT * FROM users WHERE id = ?").get(b.user_id);
-        const chosenName = b.chosen_player === 1 ? p1User.name : p2User.name;
-        const profit = returnPoints - b.amount;
-
-        db.prepare("INSERT INTO user_bet_history (match_id, user_id, user_name, chosen_player_name, bet_amount, payout, profit) VALUES (?, ?, ?, ?, ?, ?, ?)").run(
-            savedMatchId, b.user_id, betUser.name, chosenName, b.amount, returnPoints, profit
-        );
     });
 
     db.prepare("UPDATE match_state SET status = 'FINISHED', winner = ? WHERE id = 1").run(winType);
@@ -407,11 +539,11 @@ app.post('/user/place-bet', (req, res) => {
 
     const existingBet = db.prepare("SELECT * FROM bets WHERE user_id = ?").get(userId);
     if (existingBet) {
-        return res.send("<script>alert('이미 베팅을 완료하셨습니다. 수정할 수 없습니다.'); history.back();</script>");
+        return res.send("<script>alert('이미 베팅을 완료하셨습니다.'); history.back();</script>");
     }
 
     db.prepare("UPDATE users SET points = points - ? WHERE id = ?").run(betAmount, userId);
-    db.prepare("INSERT INTO bets (user_id, chosen_player, amount) VALUES (?, ?, ?)").run(userId, parseInt(chosenPlayer), betAmount);
+    db.prepare("INSERT INTO bets (user_id, is_bot, name, chosen_player, amount) VALUES (?, 0, ?, ?, ?)").run(userId, user.name, parseInt(chosenPlayer), betAmount);
 
     io.emit('refreshData');
     res.redirect('/');
