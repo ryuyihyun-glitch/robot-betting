@@ -38,7 +38,6 @@ db.prepare(`CREATE TABLE IF NOT EXISTS bets (
     amount INTEGER
 )`).run();
 
-// 상품 테이블 생성
 db.prepare(`CREATE TABLE IF NOT EXISTS products (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT,
@@ -46,14 +45,15 @@ db.prepare(`CREATE TABLE IF NOT EXISTS products (
     stock INTEGER
 )`).run();
 
-// 초기 설정값 세팅
+// 초기 설정값 세팅 (컬링 보상 'curling_reward' 추가)
 const initSettings = [
     ['initial_points', '1000'],
     ['win_multiplier', '2'],
     ['lose_multiplier', '0.5'],
     ['draw_multiplier', '1'],
-    ['final_multiplier', '1'], // 배팅 정산 최종 배율
-    ['store_password', '1234']  // 상품 구매 승인 비밀번호
+    ['final_multiplier', '1'],
+    ['store_password', '1234'],
+    ['curling_reward', '200'] // 컬링 게임 보상 기본값 200
 ];
 for (let [k, v] of initSettings) {
     const exists = db.prepare("SELECT * FROM settings WHERE key = ?").get(k);
@@ -92,7 +92,8 @@ function getCommonData(currentUser, reqQuery = {}) {
         lose_multiplier: getSetting('lose_multiplier'),
         draw_multiplier: getSetting('draw_multiplier'),
         final_multiplier: getSetting('final_multiplier'),
-        store_password: getSetting('store_password')
+        store_password: getSetting('store_password'),
+        curling_reward: getSetting('curling_reward')
     };
 
     const match = db.prepare("SELECT * FROM match_state WHERE id = 1").get();
@@ -159,19 +160,29 @@ app.post('/login', (req, res) => {
 });
 
 app.post('/admin/update-settings', (req, res) => {
-    const { initial_points, win_multiplier, lose_multiplier, draw_multiplier, final_multiplier, store_password } = req.body;
+    const { initial_points, win_multiplier, lose_multiplier, draw_multiplier, final_multiplier, store_password, curling_reward } = req.body;
     db.prepare("UPDATE settings SET value = ? WHERE key = 'initial_points'").run(initial_points);
     db.prepare("UPDATE settings SET value = ? WHERE key = 'win_multiplier'").run(win_multiplier);
     db.prepare("UPDATE settings SET value = ? WHERE key = 'lose_multiplier'").run(lose_multiplier);
     db.prepare("UPDATE settings SET value = ? WHERE key = 'draw_multiplier'").run(draw_multiplier);
     db.prepare("UPDATE settings SET value = ? WHERE key = 'final_multiplier'").run(final_multiplier);
     db.prepare("UPDATE settings SET value = ? WHERE key = 'store_password'").run(store_password);
+    db.prepare("UPDATE settings SET value = ? WHERE key = 'curling_reward'").run(curling_reward);
     
     io.emit('refreshData');
     res.redirect('/?admin=1');
 });
 
-// 상품 관리: 추가
+// 컬링 게임 보상 지급 라우트
+app.post('/admin/add-curling-reward', (req, res) => {
+    const { userId } = req.body;
+    const reward = parseInt(getSetting('curling_reward') || 200);
+
+    db.prepare("UPDATE users SET points = points + ? WHERE id = ?").run(reward, userId);
+    io.emit('refreshData');
+    res.redirect('/?admin=1');
+});
+
 app.post('/admin/add-product', (req, res) => {
     const { name, price, stock } = req.body;
     db.prepare("INSERT INTO products (name, price, stock) VALUES (?, ?, ?)").run(name, parseInt(price), parseInt(stock));
@@ -179,7 +190,6 @@ app.post('/admin/add-product', (req, res) => {
     res.redirect('/?admin=1');
 });
 
-// 상품 관리: 수정
 app.post('/admin/update-product', (req, res) => {
     const { productId, name, price, stock } = req.body;
     db.prepare("UPDATE products SET name = ?, price = ?, stock = ? WHERE id = ?").run(name, parseInt(price), parseInt(stock), productId);
@@ -187,7 +197,6 @@ app.post('/admin/update-product', (req, res) => {
     res.redirect('/?admin=1');
 });
 
-// 상품 관리: 삭제
 app.post('/admin/delete-product', (req, res) => {
     const { productId } = req.body;
     db.prepare("DELETE FROM products WHERE id = ?").run(productId);
@@ -195,7 +204,6 @@ app.post('/admin/delete-product', (req, res) => {
     res.redirect('/?admin=1');
 });
 
-// 고객 상품 구매 (관리자 비밀번호 승인 방식)
 app.post('/user/buy-product', (req, res) => {
     const { userId, productId, password } = req.body;
     const storePwd = getSetting('store_password');
@@ -214,7 +222,6 @@ app.post('/user/buy-product', (req, res) => {
         return res.send("<script>alert('보유 포인트가 부족합니다.'); history.back();</script>");
     }
 
-    // 포인트 차감 및 재고 감소
     db.prepare("UPDATE users SET points = points - ? WHERE id = ?").run(product.price, userId);
     db.prepare("UPDATE products SET stock = stock - 1 WHERE id = ?").run(productId);
 
@@ -270,7 +277,6 @@ app.post('/admin/close-betting', (req, res) => {
     res.redirect('/?admin=1');
 });
 
-// 결과 정산 시 최종 배율(final_multiplier) 반영
 app.post('/admin/end-match', (req, res) => {
     const { winner } = req.body; 
     const match = db.prepare("SELECT * FROM match_state WHERE id = 1").get();
@@ -283,7 +289,7 @@ app.post('/admin/end-match', (req, res) => {
     const wMul = parseFloat(getSetting('win_multiplier'));
     const lMul = parseFloat(getSetting('lose_multiplier'));
     const dMul = parseFloat(getSetting('draw_multiplier'));
-    const finalMul = parseFloat(getSetting('final_multiplier') || 1); // 최종 배율
+    const finalMul = parseFloat(getSetting('final_multiplier') || 1);
 
     let p1NewPts = 0, p2NewPts = 0;
     if (winType === 1) {
@@ -317,7 +323,6 @@ app.post('/admin/end-match', (req, res) => {
             returnPoints = b.amount;
         } else if (b.chosen_player === winType) {
             if (winnerPool > 0) {
-                // 기존 공식에 * final_multiplier 적용
                 returnPoints = Math.floor(b.amount * (totalPool / winnerPool) * finalMul);
             } else {
                 returnPoints = Math.floor(b.amount * finalMul);
